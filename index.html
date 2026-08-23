@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#d66551" />
+    <title>一两步 · 双语排版工具 · 斯坦福外刊精选模板</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Noto+Serif+SC:wght@500;600;700;900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css?v=17" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark"><span></span><span></span><span></span></div>
+          <div>
+            <strong>一两步</strong>
+            <small>双语排版工具 · EDITORIAL NOTE STUDIO</small>
+          </div>
+        </div>
+
+        <nav class="side-nav" aria-label="主导航">
+          <a class="nav-item active" href="#workspace"><span class="nav-icon">✦</span>工作台</a>
+          <a class="nav-item" href="#templates"><span class="nav-icon">▤</span>笔记模板</a>
+          <a class="nav-item" href="#exports"><span class="nav-icon">↗</span>导出中心</a>
+        </nav>
+
+        <div class="sidebar-bottom">
+          <div class="local-status"><i></i><span>本地编辑模式</span><b>V 0.1</b></div>
+          <div class="profile-mini"><div class="avatar">F</div><div><strong>我的工作台</strong><small>今天也要写点东西</small></div><span>•••</span></div>
+        </div>
+      </aside>
+
+      <main class="main-content" id="workspace">
+        <header class="topbar">
+          <div class="breadcrumbs"><span class="tool-brand">一两步</span><span>工作台</span><b>/</b><strong>斯坦福外刊精选模板</strong></div>
+          <div class="top-actions"><span class="shortcut">⌘ K</span><button class="round-button" aria-label="设置">⚙</button></div>
+        </header>
+
+        <section class="workspace-grid">
+          <div class="composer-column">
+            <div class="panel composer-panel">
+              <div class="panel-heading">
+                <div><span class="step-number">01</span><div><small>YOUR ORIGINAL</small><h2>输入中文原稿</h2></div></div>
+                <span class="panel-dot">●</span>
+              </div>
+
+              <div class="title-input-wrap">
+                <label for="titleText">NOTE TITLE · 笔记标题</label>
+                <input id="titleText" maxlength="80" aria-label="笔记标题" placeholder="给这篇笔记写一个标题（可选）" />
+              </div>
+
+              <div class="title-input-wrap brand-input-wrap">
+                <label for="brandText">IP BRAND · 全页品牌名</label>
+                <input id="brandText" maxlength="24" aria-label="全页品牌名" value="斯坦福外刊" placeholder="输入你的 IP 品牌名" />
+                <small>将统一显示在每一页顶部徽章与底部署名</small>
+              </div>
+
+              <div class="textarea-wrap">
+                <textarea id="sourceText" maxlength="4000" aria-label="中文原稿">真正的自由，不是拥有更多选择，而是越来越清楚自己不想要什么。
+
+把生活过成自己喜欢的样子，需要一点勇气，也需要一点耐心。</textarea>
+                <div class="textarea-footer"><span id="charCount">0 / 4000</span><span>中文 · 自动识别</span></div>
+              </div>
+
+              <div class="image-import" id="imageImport">
+                <div class="import-heading"><div><span class="import-icon">▧</span><div><small>IMAGE INPUT · OCR</small><strong>上传电脑图片</strong></div></div><span class="image-count" id="imageCount">0 / 6</span></div>
+                <label class="dropzone" id="dropzone" for="imageUpload"><input id="imageUpload" type="file" accept="image/*" multiple /><span class="upload-cloud">↑</span><span><b>拖拽图片到这里</b><small>或点击选择 · 支持 JPG / PNG / WEBP</small></span><em>最多 6 张</em></label>
+                <div class="uploaded-list" id="uploadedList" aria-live="polite"></div>
+                <div class="ocr-status" id="ocrStatus"><i></i>上传后点击“生成英文笔记”，自动识别图片里的中文</div>
+              </div>
+
+              <div class="quick-section" id="templates">
+                <div class="section-label"><span>QUICK START</span><i></i><small>试试一个灵感</small></div>
+                <div class="preset-list">
+                  <button class="preset" data-text="真正的自由，不是拥有更多选择，而是越来越清楚自己不想要什么。\n\n把生活过成自己喜欢的样子，需要一点勇气，也需要一点耐心。"><span>✦</span> 自我成长</button>
+                  <button class="preset" data-text="不要害怕走得慢，重要的是不要停下来。每一个微小的行动，都在把你带向更喜欢的自己。"><span>◌</span> 温柔鼓励</button>
+                  <button class="preset" data-text="真正厉害的人，往往不急着证明自己。他们把时间花在长期主义上，也把安静变成一种力量。"><span>⌁</span> 认知思考</button>
+                </div>
+              </div>
+
+              <div class="options-row">
+                <label>笔记语气<select id="toneSelect"><option value="warm">温柔有力量</option><option value="clear">简洁有观点</option><option value="literary">文学感</option></select></label>
+                <label>英文长度<select id="lengthSelect"><option value="standard">标准</option><option value="short">精简</option><option value="long">展开</option></select></label>
+              </div>
+
+              <div class="tuning-panel">
+                <div class="section-label"><span>FINE TUNE</span><i></i><small>取景与排版微调</small></div>
+                <div class="range-grid">
+                  <label class="range-control"><span>封面图片高度 <output id="coverHeightValue">39%</output></span><input id="coverHeightRange" type="range" min="30" max="75" step="1" value="39" /></label>
+                  <label class="range-control"><span>图片缩放比例 <output id="imageScaleValue">100%</output></span><input id="imageScaleRange" type="range" min="100" max="220" step="5" value="100" /></label>
+                  <label class="range-control"><span>封面中文标题 <output id="coverTitleValue">42px</output></span><input id="coverTitleRange" type="range" min="34" max="48" step="1" value="42" /></label>
+                  <label class="range-control"><span>正文字号 <output id="bodyFontValue">14.5px</output></span><input id="bodyFontRange" type="range" min="11" max="16.5" step="0.5" value="14.5" /></label>
+                  <label class="range-control"><span>正文行高 <output id="lineHeightValue">1.45</output></span><input id="lineHeightRange" type="range" min="1.35" max="1.90" step="0.05" value="1.45" /></label>
+                </div>
+              </div>
+
+              <button class="generate-button" id="generateBtn"><span>✦</span><span id="generateLabel">一键翻译并生成笔记</span><kbd>⌘ ↵</kbd></button>
+              <p class="privacy-note"><span>♧</span> 图片在浏览器内 OCR；英文翻译请求在线翻译，失败会切换本地备用。</p>
+
+              <details class="review-panel" id="reviewPanel">
+                <summary><span>03</span><strong>生成后校对双语内容</strong><small>逐页修改，右侧立即同步</small></summary>
+                <div class="review-editor" id="reviewEditor"></div>
+              </details>
+            </div>
+
+            <div class="tip-card">
+              <div class="tip-spark">✳</div><div><strong>小提示</strong><p>一段 80～180 字的中文，更容易生成有节奏的英文笔记。</p></div><span>→</span>
+            </div>
+          </div>
+
+          <div class="preview-column" id="exports">
+            <div class="preview-topline"><div><span class="step-number">02</span><span class="preview-title">LIVE TEMPLATE · 成品模板</span><small class="live-hint">输入后自动更新</small></div><span class="live-pill"><i></i> LIVE</span></div>
+            <article class="note-card" id="noteCard">
+              <div class="card-quick-actions" data-html2canvas-ignore="true"><button id="copyCurrentCard" type="button" disabled>📋 复制本张</button><button id="downloadCurrentCard" type="button" disabled>⬇️ 下载本张</button></div>
+              <div class="page-brand-header"><span class="page-brand-badge" id="previewBrandBadge">斯坦福外刊</span></div>
+              <div class="page-brand-footer" id="previewBrandFooter">@斯坦福外刊</div>
+              <section class="note-page quote-page" id="quotePage">
+                <div class="quote-visual" id="previewVisual"><div class="visual-placeholder"><span></span><i></i><b></b></div></div>
+                <h3 class="quote-title-en" id="previewQuoteEnglish">Real freedom is knowing what you do not want.</h3>
+                <h2 class="quote-title-zh" id="previewQuoteChinese">真正的自由，是越来越清楚自己不想要什么</h2>
+                <div class="quote-bullets"><p id="previewQuoteBulletEn">• Clarity gives you the courage to choose a life that feels like your own.</p><p id="previewQuoteBulletZh">• 清楚自己想要什么，也清楚自己不想要什么。</p></div>
+              </section>
+              <section class="note-page article-page" id="articlePage">
+                <div class="article-heading"><div class="article-heading-copy"><h3 id="previewArticleTitle">Ten Thinking Patterns That Create a Gap</h3></div></div>
+                <div class="article-rule"></div>
+                <div class="article-columns" id="articleColumns"></div>
+              </section>
+            </article>
+
+            <div class="storyboard-head"><strong>页面故事板</strong><small>封面 · 正文 · 收束页</small></div>
+            <div class="page-strip page-strip-top" id="pageStrip" aria-label="生成页数"></div>
+
+            <div class="download-bar">
+              <div><strong>准备好带走了吗？</strong><small id="exportHint">1080×1440 · 智能生成 3–6 页 · 图片和 Markdown 一起打包。</small></div>
+              <div class="download-actions"><button class="download-button secondary" id="downloadMd" disabled>↓ Markdown</button><button class="download-button secondary" id="downloadPng" disabled>↓ 当前页</button><button class="download-button" id="downloadZip" disabled>↓ 下载 ZIP</button></div>
+            </div>
+            <div class="engine-status" id="engineStatus">✦ 等待你的中文原稿</div>
+          </div>
+        </section>
+      </main>
+    </div>
+    <div class="toast" id="toast" role="status"></div>
+    <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script defer src="app.js?v=26"></script>
+  </body>
+</html>
