@@ -218,8 +218,22 @@ async function translateLongText(text) {
   return translated.join('\n');
 }
 
+function normalizeChineseTypography(text) {
+  let quoteOpen = true;
+  return String(text || '')
+    .replace(/\r/g, '')
+    .replace(/"/g, () => { const quote = quoteOpen ? '“' : '”'; quoteOpen = !quoteOpen; return quote; })
+    .replace(/\?/g, '？')
+    .replace(/!/g, '！')
+    .replace(/\s*([，。！？、；：])/g, '$1')
+    .replace(/([，。！？、；：])\s*/g, '$1')
+    .replace(/\s*([—–]{1,2})\s*/g, '$1')
+    .replace(/([“‘（【《])\s+/g, '$1')
+    .replace(/\s+([”’）】》])/g, '$1')
+    .trim();
+}
 function productionText(text, maxLength = 1200) {
-  const clean = text.replace(/\r/g, '').trim();
+  const clean = normalizeChineseTypography(text);
   if (clean.length <= maxLength) return { text: clean, shortened: false };
   const slice = clean.slice(0, maxLength);
   const boundary = Math.max(slice.lastIndexOf('\n'), slice.lastIndexOf('。'), slice.lastIndexOf('！'), slice.lastIndexOf('？'), slice.lastIndexOf('；'));
@@ -467,9 +481,61 @@ function splitLongBlock(block, maxLength) {
   if (current) parts.push(current);
   return parts;
 }
+function sentenceUnits(block) {
+  const text = block.trim();
+  if (!text) return [];
+  const pairs = new Map([['“', '”'], ['‘', '’'], ['「', '」'], ['『', '』'], ['（', '）'], ['(', ')'], ['【', '】'], ['《', '》']]);
+  const closing = new Set([...pairs.values()]);
+  const terminals = /[。！？!?；;]/;
+  const stack = [];
+  const units = [];
+  let start = 0;
+  let doubleQuoteOpen = false;
+  let quotedTerminal = false;
+  const push = (end) => {
+    const unit = text.slice(start, end).trim();
+    if (unit) units.push(unit);
+    start = end;
+  };
+  const nextMeaningful = (index) => {
+    let cursor = index;
+    while (cursor < text.length && /\s/.test(text[cursor])) cursor += 1;
+    return text[cursor] || '';
+  };
+  for (let index = 0; index < text.length; index += 1) {
+    const token = text[index];
+    if (pairs.has(token)) stack.push(pairs.get(token));
+    else if (closing.has(token) && stack.at(-1) === token) {
+      stack.pop();
+      if (!stack.length && !doubleQuoteOpen && quotedTerminal) {
+        if (!/[—–-]/.test(nextMeaningful(index + 1))) push(index + 1);
+        quotedTerminal = false;
+      }
+      continue;
+    } else if (token === '"') {
+      doubleQuoteOpen = !doubleQuoteOpen;
+      if (!doubleQuoteOpen && !stack.length && quotedTerminal) {
+        if (!/[—–-]/.test(nextMeaningful(index + 1))) push(index + 1);
+        quotedTerminal = false;
+      }
+      continue;
+    }
+    if (!terminals.test(token)) continue;
+    if (stack.length || doubleQuoteOpen) {
+      quotedTerminal = true;
+      continue;
+    }
+    let end = index + 1;
+    while (end < text.length && terminals.test(text[end])) end += 1;
+    if (!/[—–-]/.test(nextMeaningful(end))) push(end);
+    index = end - 1;
+  }
+  push(text.length);
+  return units;
+}
 function translationUnits(text) {
   return text.split(/\n+/).map((block) => block.trim()).filter(Boolean)
-    .flatMap((block) => block.split(/(?<=[。！？；.!?;])\s*/).map((item) => item.trim()).filter(Boolean))
+    .flatMap(sentenceUnits)
     .flatMap((block) => splitLongBlock(block, 180));
 }
 function splitText(text, maxLength = 420, maxParagraphs = 3) {
@@ -792,7 +858,7 @@ async function generate() {
   liveRequestId += 1;
   if (liveAbortController) liveAbortController.abort();
   liveAbortController = null;
-  const manualInput = source.value.trim(); const titleChinese = titleInput.value.trim(); if (!manualInput && !titleChinese && !state.images.length) { source.focus(); showToast('先写下标题、中文正文，或上传一张图片'); return; }
+  const manualInput = source.value.trim(); const titleChinese = normalizeChineseTypography(titleInput.value.trim()); if (!manualInput && !titleChinese && !state.images.length) { source.focus(); showToast('先写下标题、中文正文，或上传一张图片'); return; }
   const length = document.querySelector('#lengthSelect').value; generateBtn.disabled = true; setDownloadsEnabled(false); generateLabel.textContent = '正在翻译并同步右侧…'; setStatus('正在读取内容并翻译，完成后才能下载', true);
   const imageTexts = manualInput ? state.images.map((item) => ({ ...item, ocrText: item.ocrText || '' })) : await getImageText(); const rawText = manualInput || imageTexts.map((item) => item.ocrText).filter(Boolean).join('\n'); const prepared = productionText(rawText); const combinedText = prepared.text; if (!combinedText && !titleChinese) { generateBtn.disabled = false; generateLabel.textContent = '一键翻译并生成笔记'; setStatus('没有读到中文内容，请补充文字或换一张图片', false); showToast('图片 OCR 没有识别出中文'); return; } let english = ''; let titleEnglish = ''; let usingLocal = false;
   try { english = combinedText ? await translateLongText(combinedText) : ''; } catch { english = combinedText ? translationUnits(combinedText).map((unit) => localTranslate(unit)).join('\n') : ''; usingLocal = true; }
@@ -849,7 +915,12 @@ function drawImageCover(ctx, image, x, y, width, height, item) {
   const position = imagePosition(item);
   const drawX = x + (width - drawWidth) / 2 + width * (position.x / 100);
   const drawY = y + (height - drawHeight) / 2 + height * (position.y / 100);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, width, height);
+  ctx.clip();
   ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+  ctx.restore();
 }
 function drawCanvasBullet(ctx, text, x, y, width, font, lineHeight, mode, maxLines) {
   ctx.font = font; ctx.fillStyle = '#050505'; ctx.fillText('•', x, y); const lines = wrapCanvasText2(ctx, text, width - 50, mode).slice(0, maxLines); lines.forEach((line, index) => ctx.fillText(line, x + 46, y + index * lineHeight)); return y + Math.max(1, lines.length) * lineHeight;
