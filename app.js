@@ -829,15 +829,15 @@ function drawBrandChrome(ctx, isQuote = false) {
   const brand = brandName();
   const badgeText = headline(brand, 12);
   ctx.save();
-  ctx.font = '700 24px "PingFang SC", "Noto Serif SC", serif';
-  const badgeWidth = Math.min(330, Math.max(150, Math.ceil(ctx.measureText(badgeText).width + 42)));
+  ctx.font = '800 29px "PingFang SC", "Noto Serif SC", serif';
+  const badgeWidth = Math.min(370, Math.max(180, Math.ceil(ctx.measureText(badgeText).width + 54)));
   ctx.fillStyle = '#861d2d';
   ctx.beginPath();
-  ctx.roundRect(22, 20, badgeWidth, 58, 8);
+  ctx.roundRect(22, 20, badgeWidth, 68, 10);
   ctx.fill();
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'center';
-  ctx.fillText(badgeText, 22 + badgeWidth / 2, 57);
+  ctx.fillText(badgeText, 22 + badgeWidth / 2, 64);
   ctx.textAlign = 'left';
   ctx.fillStyle = '#050505';
   ctx.textAlign = 'center';
@@ -894,7 +894,7 @@ function drawArticleCanvasRows(ctx, page, startY) {
   }
 }
 function drawArticleCanvasText(ctx, page) {
-  const title = headline(page.titleEnglish || firstSentence(page.english), 52); ctx.fillStyle = '#050505'; const titleFontSize = fitCanvasFont(ctx, title, 1000, 52, 34, 'Georgia, "Times New Roman", serif'); ctx.font = `500 ${titleFontSize}px Georgia, "Times New Roman", serif`; const titleLines = wrapCanvasText2(ctx, title, 1000, 'words').slice(0, 2); titleLines.forEach((line, index) => ctx.fillText(line, 37, 135 + index * (titleFontSize + 5))); const ruleY = 169 + Math.max(0, titleLines.length - 1) * (titleFontSize + 5); ctx.fillStyle = '#989898'; ctx.fillRect(21, ruleY, 1028, 7);
+  const title = headline(page.titleEnglish || firstSentence(page.english), 52); ctx.fillStyle = '#050505'; const titleFontSize = fitCanvasFont(ctx, title, 1000, 52, 34, 'Georgia, "Times New Roman", serif'); ctx.font = `500 ${titleFontSize}px Georgia, "Times New Roman", serif`; const titleLines = wrapCanvasText2(ctx, title, 1000, 'words').slice(0, 2); titleLines.forEach((line, index) => ctx.fillText(line, 37, 145 + index * (titleFontSize + 5))); const ruleY = 179 + Math.max(0, titleLines.length - 1) * (titleFontSize + 5); ctx.fillStyle = '#989898'; ctx.fillRect(21, ruleY, 1028, 7);
   drawArticleCanvasRows(ctx, page, ruleY + 72);
   drawBrandChrome(ctx, false);
 }
