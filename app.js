@@ -202,16 +202,19 @@ async function remoteTranslate(text, externalSignal) {
 }
 
 function validateTranslation(translated) {
-  const clean = String(translated || '').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&amp;/g, '&').trim();
+  const clean = String(translated || '').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
   if (!clean || /(QUERY\s+LENGTH|LIMIT\s+EXCEEDED|MAX(?:IMUM)?\s+ALLOWED|INVALID\s+QUERY|MYMEMORY\s+WARNING|PLEASE\s+REDUCE)/i.test(clean)) throw new Error('invalid translation response');
   return clean;
 }
 
 async function translateLongText(text) {
-  const chunks = splitText(text, 420, 8);
-  if (chunks.length <= 1) return remoteTranslate(text);
+  const chunks = translationUnits(text);
+  if (chunks.length <= 1) return remoteTranslate(chunks[0] || text);
   const translated = [];
-  for (const chunk of chunks) translated.push(await remoteTranslate(chunk));
+  for (let index = 0; index < chunks.length; index += 4) {
+    const batch = chunks.slice(index, index + 4);
+    translated.push(...await Promise.all(batch.map((chunk) => remoteTranslate(chunk))));
+  }
   return translated.join('\n');
 }
 
@@ -377,7 +380,7 @@ function keepGeneratedPagesAfterImageChange() {
 }
 
 function renderUploadedImages() {
-  imageCount.textContent = `${state.images.length} / 6`; uploadedList.innerHTML = '';
+  imageCount.textContent = `${state.images.length} / 1`; uploadedList.innerHTML = '';
   state.images.forEach((item, index) => {
     const chip = document.createElement('div'); chip.className = 'image-chip';
     chip.innerHTML = `<img src="${item.url}" alt="${item.name}" /><span><b>${item.name}</b><small>${item.ocrText ? '已识别中文' : '等待识别'}</small></span><button type="button" aria-label="移除 ${item.name}">×</button>`;
@@ -395,15 +398,16 @@ function renderUploadedImages() {
   dropzone.classList.toggle('has-images', state.images.length > 0);
 }
 function addImages(files) {
-  const accepted = [...files].filter((file) => file.type.startsWith('image/')).slice(0, 6 - state.images.length);
-  if (!accepted.length) { showToast(state.images.length >= 6 ? '最多上传 6 张图片' : '请选择 JPG、PNG 或 WEBP 图片'); return; }
-  accepted.forEach((file) => state.images.push({ file, url: URL.createObjectURL(file), name: file.name, ocrText: '', translateX: 0, translateY: 0 }));
+  const file = [...files].find((item) => item.type.startsWith('image/'));
+  if (!file) { showToast('请选择 JPG、PNG 或 WEBP 图片'); return; }
+  state.images.forEach((item) => URL.revokeObjectURL(item.url));
+  state.images = [{ file, url: URL.createObjectURL(file), name: file.name, ocrText: '', translateX: 0, translateY: 0 }];
   state.coverMode = 'upload';
   const keptPages = keepGeneratedPagesAfterImageChange();
   renderUploadedImages();
   if (!keptPages) { invalidateGeneratedPages(); renderLivePreview(liveEnglish); }
-  setOcrStatus(keptPages ? '图片已完整加入封面，后续文字分页保持不变' : `${state.images.length} 张图片已加入，默认完整显示；点击生成按钮开始 OCR`);
-  showToast(keptPages ? `已添加 ${accepted.length} 张图片 · 默认完整显示` : `已添加 ${accepted.length} 张图片 · 默认不裁切`);
+  setOcrStatus(keptPages ? '首图已替换，后续文字分页保持不变' : '首图已加入；点击生成按钮开始 OCR');
+  showToast(keptPages ? '首图已替换' : '首图已加入');
 }
 
 let tesseractPromise;
@@ -443,13 +447,30 @@ function splitLongBlock(block, maxLength) {
   sentences.forEach((sentence) => {
     if (sentence.length > maxLength) {
       if (current) { parts.push(current); current = ''; }
-      for (let index = 0; index < sentence.length; index += maxLength) parts.push(sentence.slice(index, index + maxLength));
+      let offset = 0;
+      while (offset < sentence.length) {
+        let end = Math.min(sentence.length, offset + maxLength);
+        if (end < sentence.length) {
+          const window = sentence.slice(offset, end);
+          const boundary = Math.max(window.lastIndexOf('，'), window.lastIndexOf('、'), window.lastIndexOf('；'), window.lastIndexOf('：'), window.lastIndexOf(','), window.lastIndexOf(';'), window.lastIndexOf(':'));
+          if (boundary >= Math.floor(maxLength * .62)) end = offset + boundary + 1;
+          while (end < sentence.length && /[，。！？、；：,.!?;:）】》”’]/.test(sentence[end])) end += 1;
+        }
+        const part = sentence.slice(offset, end).trim();
+        if (part) parts.push(part);
+        offset = end;
+      }
     } else if (current && current.length + sentence.length > maxLength) {
       parts.push(current); current = sentence;
     } else current += sentence;
   });
   if (current) parts.push(current);
   return parts;
+}
+function translationUnits(text) {
+  return text.split(/\n+/).map((block) => block.trim()).filter(Boolean)
+    .flatMap((block) => block.split(/(?<=[。！？；.!?;])\s*/).map((item) => item.trim()).filter(Boolean))
+    .flatMap((block) => splitLongBlock(block, 180));
 }
 function splitText(text, maxLength = 420, maxParagraphs = 3) {
   const blocks = text.split(/\n+/).map((block) => block.trim()).filter(Boolean); if (!blocks.length) return [];
@@ -495,24 +516,11 @@ function distributeUnits(units, targetCount) {
 }
 
 function alignedContentUnits(chinese, english) {
-  const chineseParagraphs = chinese.split(/\n+/).map((item) => item.trim()).filter(Boolean);
   const englishParagraphs = english.split(/\n+/).map((item) => item.trim()).filter(Boolean);
-  const chineseUnits = chineseParagraphs.flatMap((block) => block.split(/(?<=[。！？；])/).filter(Boolean)).flatMap((block) => splitLongBlock(block, 120));
-  let englishUnits = englishParagraphs.flatMap((block) => splitEnglishBlock(block));
+  const chineseUnits = translationUnits(chinese);
+  let englishUnits = englishParagraphs;
   if (englishUnits.length !== chineseUnits.length) englishUnits = distributeUnits(englishUnits, chineseUnits.length);
-  const units = chineseUnits.map((unit, index) => ({ chinese: unit, english: englishUnits[index] || '' }));
-  while (units.length < 3) {
-    const splitIndex = units.reduce((best, unit, index) => unit.chinese.length > (units[best]?.chinese.length || 0) ? index : best, 0);
-    const unit = units[splitIndex];
-    if (!unit || unit.chinese.length < 24) break;
-    const chineseCut = Math.ceil(unit.chinese.length / 2);
-    const englishWords = unit.english.split(/\s+/).filter(Boolean);
-    const englishCut = Math.ceil(englishWords.length / 2);
-    units.splice(splitIndex, 1,
-      { chinese: unit.chinese.slice(0, chineseCut).trim(), english: englishWords.slice(0, englishCut).join(' ') },
-      { chinese: unit.chinese.slice(chineseCut).trim(), english: englishWords.slice(englishCut).join(' ') });
-  }
-  return units;
+  return chineseUnits.map((unit, index) => ({ chinese: unit, english: englishUnits[index] || '' }));
 }
 
 const paginationCanvas = document.createElement('canvas');
@@ -558,13 +566,10 @@ function makePages(manualText, titleChinese, titleEnglish, english, imageTexts, 
   const sourceText = manualText.trim() || ocrText;
   const contentPages = paginateBilingualByHeight(sourceText, english);
   const coverContent = contentPages[0] || { chinese: sourceText, english };
-  const finalChinese = '真正有效的育儿，不是替孩子完成成长，而是给他安全感、边界与自己向前走的力量。';
-  const finalEnglish = 'Good parenting does not complete growth for a child. It offers safety, boundaries, and the strength to move forward independently.';
   return [
     { ...coverContent, role: 'cover', titleChinese, titleEnglish, image: currentCoverImage(), translationSource: initialSource },
     ...contentPages.map((content) => ({ ...content, role: 'article', titleChinese, titleEnglish, image: null, translationSource: initialSource })),
-    { chinese: finalChinese, english: finalEnglish, role: 'closing', titleChinese: titleChinese || '把成长还给孩子', titleEnglish: titleEnglish || 'Let Growth Belong to the Child', image: currentCoverImage(), translationSource: initialSource },
-  ].slice(0, 6);
+  ].slice(0, 5);
 }
 
 function fitPreviewArticleText() {
@@ -789,10 +794,10 @@ async function generate() {
   liveAbortController = null;
   const manualInput = source.value.trim(); const titleChinese = titleInput.value.trim(); if (!manualInput && !titleChinese && !state.images.length) { source.focus(); showToast('先写下标题、中文正文，或上传一张图片'); return; }
   const length = document.querySelector('#lengthSelect').value; generateBtn.disabled = true; setDownloadsEnabled(false); generateLabel.textContent = '正在翻译并同步右侧…'; setStatus('正在读取内容并翻译，完成后才能下载', true);
-  const imageTexts = await getImageText(); const rawText = manualInput || imageTexts.map((item) => item.ocrText).filter(Boolean).join('\n'); const prepared = productionText(rawText); const combinedText = prepared.text; if (!combinedText && !titleChinese) { generateBtn.disabled = false; generateLabel.textContent = '一键翻译并生成笔记'; setStatus('没有读到中文内容，请补充文字或换一张图片', false); showToast('图片 OCR 没有识别出中文'); return; } let english = ''; let titleEnglish = ''; let usingLocal = false;
-  try { english = combinedText ? await translateLongText(combinedText) : ''; } catch { english = combinedText ? localTranslate(combinedText) : ''; usingLocal = true; }
+  const imageTexts = manualInput ? state.images.map((item) => ({ ...item, ocrText: item.ocrText || '' })) : await getImageText(); const rawText = manualInput || imageTexts.map((item) => item.ocrText).filter(Boolean).join('\n'); const prepared = productionText(rawText); const combinedText = prepared.text; if (!combinedText && !titleChinese) { generateBtn.disabled = false; generateLabel.textContent = '一键翻译并生成笔记'; setStatus('没有读到中文内容，请补充文字或换一张图片', false); showToast('图片 OCR 没有识别出中文'); return; } let english = ''; let titleEnglish = ''; let usingLocal = false;
+  try { english = combinedText ? await translateLongText(combinedText) : ''; } catch { english = combinedText ? translationUnits(combinedText).map((unit) => localTranslate(unit)).join('\n') : ''; usingLocal = true; }
   try { titleEnglish = titleChinese ? await remoteTranslate(titleChinese) : ''; } catch { titleEnglish = titleChinese ? localTranslate(titleChinese) : ''; usingLocal = true; }
-  if (length === 'short') english = english.split(/(?<=[.!?])\s+/).slice(0, 2).join(' '); if (length === 'long' && !english.endsWith('.')) english += '.';
+  if (length === 'long' && !english.endsWith('.')) english += '.';
   state.document = { manualText: combinedText, titleChinese, titleEnglish, english, imageTexts, translationSource: usingLocal ? 'local' : 'online' };
   state.pages = makePages(combinedText, titleChinese, titleEnglish, english, imageTexts, state.document.translationSource); state.currentPage = 0; renderPageStrip(); renderReviewEditor(); const titleEn = renderPreview(state.pages[0], 0);
   const hasLocalPage = state.pages.some((page) => page.translationSource === 'local');
@@ -805,10 +810,31 @@ function downloadFile(filename, content, type) { downloadBlob(filename, new Blob
 function downloadBlob(filename, blob) { const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
 function noteMarkdown() { return state.pages.map((page, index) => `# ${index + 1}. ${shortTitle(page.titleChinese || page.chinese)}\n\n## 中文标题\n\n${page.titleChinese || ''}\n\n## English Title\n\n${page.titleEnglish || ''}\n\n## 中文笔记\n\n${page.chinese}\n\n## English Note\n\n${page.english}\n\n## Takeaway\n\n${getTakeaway(page.english, document.querySelector('#toneSelect').value)}\n`).join('\n---\n\n') + `\nGenerated by 双语排版工具 · ${brandName()}\n`; }
 function wrapCanvasText2(ctx, text, maxWidth, mode = 'chars') {
-  const tokens = mode === 'words' ? text.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean) : [...text.replace(/\n+/g, ' ')];
+  const clean = text.replace(/\n+/g, ' ').trim();
   const lines = []; let line = '';
-  tokens.forEach((token) => { const next = mode === 'words' && line ? `${line} ${token}` : line + token; if (line && ctx.measureText(next).width > maxWidth) { lines.push(line); line = token; } else line = next; });
-  if (line) lines.push(line); return lines;
+  if (mode === 'words') {
+    clean.split(' ').filter(Boolean).forEach((token) => {
+      const next = line ? `${line} ${token}` : token;
+      if (line && ctx.measureText(next).width > maxWidth) { lines.push(line); line = token; }
+      else line = next;
+    });
+  } else {
+    const closing = /[，。！？、；：,.!?;:）】》”’]/;
+    const opening = /[（【《“‘]/;
+    [...clean].forEach((token) => {
+      if (!line && closing.test(token) && lines.length) { lines[lines.length - 1] += token; return; }
+      const next = line + token;
+      if (line && ctx.measureText(next).width > maxWidth) {
+        if (closing.test(token)) { lines.push(line + token); line = ''; return; }
+        let carry = '';
+        while (line && opening.test(line.at(-1))) { carry = line.at(-1) + carry; line = line.slice(0, -1); }
+        if (line) lines.push(line);
+        line = carry + token;
+      } else line = next;
+    });
+  }
+  if (line) lines.push(line);
+  return lines;
 }
 function fitCanvasFont(ctx, text, maxWidth, maxSize, minSize, family) { let size = maxSize; do { ctx.font = `500 ${size}px ${family}`; size -= 1; } while (ctx.measureText(text).width > maxWidth && size >= minSize); return Math.max(minSize, size + 1); }
 function drawImageCover(ctx, image, x, y, width, height, item) {
@@ -883,7 +909,7 @@ function drawQuoteCanvasText(ctx, page) {
   const chineseTitleLine = Math.round(104 * compact);
   const bodySize = Math.max(15, Math.round(state.settings.bodyFont * 1.9 * compact));
   const bodyLine = Math.round(bodySize * state.settings.lineHeight);
-  const englishStart = imageHeight + Math.round(75 * compact);
+  const englishStart = imageHeight + englishTitleSize + Math.round(36 * compact);
   ctx.textAlign = 'center'; ctx.fillStyle = '#050505'; ctx.font = `600 ${englishTitleSize}px Georgia, "Times New Roman", serif`; const enLines = wrapCanvasText2(ctx, titleEn, 950, 'words').slice(0, 2); enLines.forEach((line, index) => ctx.fillText(line, 540, englishStart + index * englishTitleLine));
   const chineseStart = englishStart + Math.max(1, enLines.length) * englishTitleLine + Math.round(88 * compact); ctx.font = `600 ${chineseTitleSize}px "Songti SC", STSong, "Noto Serif SC", serif`; const zhLines = wrapCanvasText2(ctx, titleZh, 1030, 'chars').slice(0, 2); zhLines.forEach((line, index) => ctx.fillText(line, 540, chineseStart + index * chineseTitleLine));
   ctx.textAlign = 'left'; const bulletStart = chineseStart + Math.max(1, zhLines.length) * chineseTitleLine + Math.round(72 * compact); const bulletEnEnd = drawCanvasBullet(ctx, bodyEn, 40, bulletStart, 1000, `500 ${bodySize}px Arial, "Helvetica Neue", sans-serif`, bodyLine, 'words', state.settings.coverHeight > 62 ? 1 : 3); drawCanvasBullet(ctx, bodyZh, 40, bulletEnEnd + Math.round(16 * compact), 1000, `400 ${bodySize}px Arial, "PingFang SC", sans-serif`, bodyLine, 'chars', state.settings.coverHeight > 62 ? 1 : 2);

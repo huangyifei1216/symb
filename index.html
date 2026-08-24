@@ -66,8 +66,8 @@
               </div>
 
               <div class="image-import" id="imageImport">
-                <div class="import-heading"><div><span class="import-icon">▧</span><div><small>IMAGE INPUT · OCR</small><strong>上传电脑图片</strong></div></div><span class="image-count" id="imageCount">0 / 6</span></div>
-                <label class="dropzone" id="dropzone" for="imageUpload"><input id="imageUpload" type="file" accept="image/*" multiple /><span class="upload-cloud">↑</span><span><b>拖拽图片到这里</b><small>或点击选择 · 支持 JPG / PNG / WEBP</small></span><em>最多 6 张</em></label>
+                <div class="import-heading"><div><span class="import-icon">▧</span><div><small>IMAGE INPUT · OCR</small><strong>上传电脑图片</strong></div></div><span class="image-count" id="imageCount">0 / 1</span></div>
+                <label class="dropzone" id="dropzone" for="imageUpload"><input id="imageUpload" type="file" accept="image/*" /><span class="upload-cloud">↑</span><span><b>拖拽首图到这里</b><small>或点击选择 · 支持 JPG / PNG / WEBP</small></span><em>单张首图</em></label>
                 <div class="uploaded-list" id="uploadedList" aria-live="polite"></div>
                 <div class="ocr-status" id="ocrStatus"><i></i>上传后点击“生成英文笔记”，自动识别图片里的中文</div>
               </div>
@@ -132,7 +132,7 @@
             </article>
 
             <div class="storyboard-head">
-              <div><strong>页面故事板</strong><small>封面 · 正文 · 收束页</small></div>
+              <div><strong>页面故事板</strong><small>单张首图 · 双语正文</small></div>
               <div class="page-navigation" aria-label="翻页控制">
                 <button id="previousPage" type="button" disabled>‹ 上一页</button>
                 <span id="pageCounter" aria-live="polite">0 / 0</span>
@@ -152,6 +152,6 @@
     </div>
     <div class="toast" id="toast" role="status"></div>
     <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-    <script defer src="app.js?v=30"></script>
+    <script defer src="app.js?v=31"></script>
   </body>
 </html>
