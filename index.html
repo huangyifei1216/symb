@@ -130,7 +130,14 @@
               </section>
             </article>
 
-            <div class="storyboard-head"><strong>页面故事板</strong><small>封面 · 正文 · 收束页</small></div>
+            <div class="storyboard-head">
+              <div><strong>页面故事板</strong><small>封面 · 正文 · 收束页</small></div>
+              <div class="page-navigation" aria-label="翻页控制">
+                <button id="previousPage" type="button" disabled>‹ 上一页</button>
+                <span id="pageCounter" aria-live="polite">0 / 0</span>
+                <button id="nextPage" type="button" disabled>下一页 ›</button>
+              </div>
+            </div>
             <div class="page-strip page-strip-top" id="pageStrip" aria-label="生成页数"></div>
 
             <div class="download-bar">
@@ -144,6 +151,6 @@
     </div>
     <div class="toast" id="toast" role="status"></div>
     <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-    <script defer src="app.js?v=26"></script>
+    <script defer src="app.js?v=28"></script>
   </body>
 </html>

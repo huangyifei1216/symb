@@ -12,6 +12,9 @@ const uploadedList = document.querySelector('#uploadedList');
 const imageCount = document.querySelector('#imageCount');
 const ocrStatus = document.querySelector('#ocrStatus');
 const pageStrip = document.querySelector('#pageStrip');
+const previousPageButton = document.querySelector('#previousPage');
+const nextPageButton = document.querySelector('#nextPage');
+const pageCounter = document.querySelector('#pageCounter');
 const exportHint = document.querySelector('#exportHint');
 const downloadButtons = [...document.querySelectorAll('.download-button')];
 const noteCard = document.querySelector('#noteCard');
@@ -274,6 +277,14 @@ function invalidateGeneratedPages() {
   renderPageStrip();
   renderReviewEditor();
   setDownloadsEnabled(false);
+}
+
+function updatePageNavigation() {
+  const total = state.pages.length;
+  const current = total ? Math.min(state.currentPage + 1, total) : 0;
+  pageCounter.textContent = `${current} / ${total}`;
+  previousPageButton.disabled = !total || current <= 1;
+  nextPageButton.disabled = !total || current >= total;
 }
 
 function imagePosition(item) {
@@ -596,8 +607,12 @@ function renderPreview(page, index = 0, isLive = false) {
   const isQuote = page.role === 'cover' || page.role === 'closing' || Boolean(page.image?.url);
   const fallbackTitleZh = lines[0] || chinese;
   const fallbackTitleEn = english || defaultPreview.english;
-  const titleZh = isQuote ? quoteChineseTitle(page.titleChinese || fallbackTitleZh) : headline(page.titleChinese || fallbackTitleZh, 46);
-  const titleEn = isQuote ? quoteEnglishTitle(page.titleEnglish || fallbackTitleEn) : headline(page.titleEnglish || firstSentence(fallbackTitleEn), 46);
+  const titleZh = isQuote
+    ? (page.titleChinese ? headline(page.titleChinese, 24) : quoteChineseTitle(fallbackTitleZh))
+    : headline(page.titleChinese || fallbackTitleZh, 46);
+  const titleEn = isQuote
+    ? (page.titleEnglish ? headline(page.titleEnglish, 64) : quoteEnglishTitle(fallbackTitleEn))
+    : headline(page.titleEnglish || firstSentence(fallbackTitleEn), 46);
   applyBrand();
   noteCard.classList.toggle('is-quote', isQuote);
   preview.quotePage.style.display = isQuote ? 'flex' : 'none'; preview.articlePage.style.display = isQuote ? 'none' : 'grid';
@@ -621,6 +636,7 @@ function renderPreview(page, index = 0, isLive = false) {
   }
   document.querySelector('.preview-title').textContent = isLive ? 'LIVE PREVIEW · 实时渲染' : `PAGE ${String(index + 1).padStart(2, '0')} · 成品预览`; state.currentPage = index;
   [...pageStrip.querySelectorAll('button')].forEach((button, buttonIndex) => button.classList.toggle('active', buttonIndex === index));
+  updatePageNavigation();
   return titleEn;
 }
 function renderLivePreview(english = liveEnglish, titleEnglish = liveTitleEnglish) {
@@ -669,6 +685,47 @@ function scheduleLivePreview() {
     }
   }, 650);
 }
+
+function applyGeneratedTitle(titleChinese, titleEnglish) {
+  if (!state.document || !state.pages.length) return;
+  state.document.titleChinese = titleChinese;
+  state.document.titleEnglish = titleEnglish;
+  state.pages.forEach((page) => {
+    page.titleChinese = titleChinese || (page.role === 'closing' ? '把成长还给孩子' : '');
+    page.titleEnglish = titleEnglish || (page.role === 'closing' ? 'Let Growth Belong to the Child' : '');
+  });
+  renderPreview(state.pages[state.currentPage], state.currentPage);
+}
+
+function scheduleTitlePreview() {
+  clearTimeout(liveTimer);
+  liveRequestId += 1;
+  const requestId = liveRequestId;
+  if (liveAbortController) liveAbortController.abort();
+  const titleChinese = titleInput.value.trim();
+  if (!state.pages.length || !state.document) {
+    scheduleLivePreview();
+    return;
+  }
+  const localTitle = titleChinese ? localTranslate(titleChinese) : '';
+  applyGeneratedTitle(titleChinese, localTitle);
+  setStatus('标题已实时同步 · 正在刷新英文标题', true);
+  liveTimer = setTimeout(async () => {
+    liveAbortController = new AbortController();
+    try {
+      const translatedTitle = titleChinese ? await remoteTranslate(titleChinese, liveAbortController.signal) : '';
+      if (requestId !== liveRequestId) return;
+      liveTitleEnglish = translatedTitle;
+      applyGeneratedTitle(titleChinese, translatedTitle);
+      setStatus(`标题已同步 · 当前第 ${state.currentPage + 1} / ${state.pages.length} 页`, false);
+    } catch (error) {
+      if (requestId !== liveRequestId || liveAbortController?.signal.aborted) return;
+      applyGeneratedTitle(titleChinese, localTitle);
+      setStatus(`标题已用备用翻译同步 · 当前第 ${state.currentPage + 1} / ${state.pages.length} 页`, false);
+    }
+  }, 450);
+}
+
 function renderPageStrip() {
   pageStrip.innerHTML = '';
   state.pages.forEach((page, index) => {
@@ -678,6 +735,7 @@ function renderPageStrip() {
     button.innerHTML = `<span class="story-number">${String(index + 1).padStart(2, '0')}</span><i class="story-mini ${page.role || 'article'}"><b></b><em></em></i><small>${typeLabel}</small>`;
     button.addEventListener('click', () => renderPreview(page, index)); pageStrip.appendChild(button);
   });
+  updatePageNavigation();
   exportHint.textContent = state.pages.length ? `1080×1440 · 已智能生成 ${state.pages.length} 页 · 图片和 Markdown 一起打包。` : '请先翻译并同步右侧，完成后才能下载。';
 }
 
@@ -788,7 +846,7 @@ function drawBrandChrome(ctx, isQuote = false) {
   ctx.restore();
 }
 function drawQuoteCanvasText(ctx, page) {
-  const firstChineseLine = page.chinese.split(/\n+/).map((line) => line.trim()).filter(Boolean)[0] || page.chinese; const titleEn = quoteEnglishTitle(page.titleEnglish || page.english); const titleZh = quoteChineseTitle(page.titleChinese || firstChineseLine); const bodyEn = page.titleEnglish ? page.english : page.english.replace(firstSentence(page.english), '').trim() || page.english; const bodyZh = page.titleChinese ? page.chinese : page.chinese.replace(firstChineseLine, '').trim() || page.chinese;
+  const firstChineseLine = page.chinese.split(/\n+/).map((line) => line.trim()).filter(Boolean)[0] || page.chinese; const titleEn = page.titleEnglish ? headline(page.titleEnglish, 64) : quoteEnglishTitle(page.english); const titleZh = page.titleChinese ? headline(page.titleChinese, 24) : quoteChineseTitle(firstChineseLine); const bodyEn = page.titleEnglish ? page.english : page.english.replace(firstSentence(page.english), '').trim() || page.english; const bodyZh = page.titleChinese ? page.chinese : page.chinese.replace(firstChineseLine, '').trim() || page.chinese;
   const imageHeight = Math.round(1440 * state.settings.coverHeight / 100);
   const contentHeight = 1420 - imageHeight;
   const compact = Math.max(.55, Math.min(1, contentHeight / 855));
@@ -881,7 +939,9 @@ async function downloadZip() {
   files.push({ name: 'bilingual-note.md', data: noteMarkdown() }); files.push({ name: 'README.txt', data: `${brandName()}双语笔记\n共 ${state.pages.length} 页 PNG + Markdown\n智能分页范围：3–6 页\n` }); downloadBlob('bilingual-note.zip', await buildZip(files)); setStatus(`ZIP 已准备完成 · ${state.pages.length} 页`, false); showToast('ZIP 笔记包已下载');
 }
 
-source.addEventListener('input', scheduleLivePreview); titleInput.addEventListener('input', scheduleLivePreview); generateBtn.addEventListener('click', generate); imageUpload.addEventListener('change', (event) => { addImages(event.target.files); event.target.value = ''; });
+source.addEventListener('input', scheduleLivePreview); titleInput.addEventListener('input', scheduleTitlePreview); generateBtn.addEventListener('click', generate); imageUpload.addEventListener('change', (event) => { addImages(event.target.files); event.target.value = ''; });
+previousPageButton.addEventListener('click', () => { if (state.currentPage > 0) renderPreview(state.pages[state.currentPage - 1], state.currentPage - 1); });
+nextPageButton.addEventListener('click', () => { if (state.currentPage < state.pages.length - 1) renderPreview(state.pages[state.currentPage + 1], state.currentPage + 1); });
 brandInput.addEventListener('input', () => { applyBrand(); if (state.pages.length) renderPreview(state.pages[state.currentPage], state.currentPage); });
 ['dragenter', 'dragover'].forEach((eventName) => dropzone.addEventListener(eventName, (event) => { event.preventDefault(); dropzone.classList.add('dragging'); })); ['dragleave', 'drop'].forEach((eventName) => dropzone.addEventListener(eventName, (event) => { event.preventDefault(); dropzone.classList.remove('dragging'); })); dropzone.addEventListener('drop', (event) => addImages(event.dataTransfer.files));
 document.addEventListener('keydown', (event) => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') generate(); }); document.querySelectorAll('.preset').forEach((button) => button.addEventListener('click', () => { source.value = button.dataset.text; scheduleLivePreview(); source.focus(); showToast('已载入一条灵感'); })); document.querySelector('#toneSelect').addEventListener('change', () => { if (state.pages.length) renderPreview(state.pages[state.currentPage], state.currentPage); else renderLivePreview(liveEnglish); });
