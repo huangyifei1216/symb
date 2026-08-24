@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Noto+Serif+SC:wght@500;600;700;900&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="styles.css?v=18" />
+    <link rel="stylesheet" href="styles.css?v=19" />
   </head>
   <body>
     <div class="app-shell">
@@ -90,7 +90,8 @@
                 <div class="section-label"><span>FINE TUNE</span><i></i><small>取景与排版微调</small></div>
                 <div class="range-grid">
                   <label class="range-control"><span>封面图片高度 <output id="coverHeightValue">39%</output></span><input id="coverHeightRange" type="range" min="30" max="75" step="1" value="39" /></label>
-                  <label class="range-control"><span>图片缩放比例 <output id="imageScaleValue">100%</output></span><input id="imageScaleRange" type="range" min="100" max="220" step="5" value="100" /></label>
+                  <label class="range-control"><span>图片缩放比例 <output id="imageScaleValue">100%</output></span><input id="imageScaleRange" type="range" min="80" max="300" step="5" value="100" /></label>
+                  <label class="select-control"><span>图片显示方式</span><select id="imageFitSelect"><option value="cover" selected>铺满画面</option><option value="contain">完整显示</option></select></label>
                   <label class="range-control"><span>封面中文标题 <output id="coverTitleValue">42px</output></span><input id="coverTitleRange" type="range" min="34" max="48" step="1" value="42" /></label>
                   <label class="range-control"><span>正文字号 <output id="bodyFontValue">14.5px</output></span><input id="bodyFontRange" type="range" min="11" max="16.5" step="0.5" value="14.5" /></label>
                   <label class="range-control"><span>正文行高 <output id="lineHeightValue">1.45</output></span><input id="lineHeightRange" type="range" min="1.35" max="1.90" step="0.05" value="1.45" /></label>
@@ -141,7 +142,7 @@
             <div class="page-strip page-strip-top" id="pageStrip" aria-label="生成页数"></div>
 
             <div class="download-bar">
-              <div><strong>准备好带走了吗？</strong><small id="exportHint">1080×1440 · 智能生成 3–6 页 · 图片和 Markdown 一起打包。</small></div>
+              <div><strong>准备好带走了吗？</strong><small id="exportHint">1080×1440 · 图片和 Markdown 一起打包。</small></div>
               <div class="download-actions"><button class="download-button secondary" id="downloadMd" disabled>↓ Markdown</button><button class="download-button secondary" id="downloadPng" disabled>↓ 当前页</button><button class="download-button" id="downloadZip" disabled>↓ 下载 ZIP</button></div>
             </div>
             <div class="engine-status" id="engineStatus">✦ 等待你的中文原稿</div>
@@ -151,6 +152,6 @@
     </div>
     <div class="toast" id="toast" role="status"></div>
     <script defer src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-    <script defer src="app.js?v=29"></script>
+    <script defer src="app.js?v=30"></script>
   </body>
 </html>

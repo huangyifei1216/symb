@@ -28,6 +28,7 @@ const reviewEditor = document.querySelector('#reviewEditor');
 const controls = {
   coverHeight: document.querySelector('#coverHeightRange'),
   imageScale: document.querySelector('#imageScaleRange'),
+  imageFit: document.querySelector('#imageFitSelect'),
   bodyFont: document.querySelector('#bodyFontRange'),
   lineHeight: document.querySelector('#lineHeightRange'),
   coverTitle: document.querySelector('#coverTitleRange'),
@@ -94,7 +95,7 @@ const state = {
   artFilter: 'flat',
   coverMode: 'library',
   libraryImage: null,
-  settings: { coverHeight: 39, imageScale: 100, bodyFont: 14.5, lineHeight: 1.45, coverTitle: 42 },
+  settings: { coverHeight: 39, imageScale: 100, imageFit: 'cover', bodyFont: 14.5, lineHeight: 1.45, coverTitle: 42 },
 };
 let liveTimer;
 let liveRequestId = 0;
@@ -186,11 +187,11 @@ async function remoteTranslate(text, externalSignal) {
     const googleRequest = fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=zh-CN&tl=en&dt=t&q=${query}`, { signal: controller.signal })
       .then((response) => { if (!response.ok) throw new Error('google translation unavailable'); return response.json(); })
       .then((data) => Array.isArray(data?.[0]) ? data[0].map((item) => item?.[0] || '').join('').trim() : '')
-      .then((translated) => { if (!translated) throw new Error('empty google translation'); return translated; });
+      .then(validateTranslation);
     const memoryRequest = fetch(`https://api.mymemory.translated.net/get?q=${query}&langpair=zh-CN|en`, { signal: controller.signal })
       .then((response) => { if (!response.ok) throw new Error('backup translation unavailable'); return response.json(); })
       .then((data) => data?.responseData?.translatedText?.trim() || '')
-      .then((translated) => { if (!translated) throw new Error('empty backup translation'); return translated; });
+      .then(validateTranslation);
     const translated = await Promise.any([googleRequest, memoryRequest]);
     controller.abort();
     return translated;
@@ -200,12 +201,27 @@ async function remoteTranslate(text, externalSignal) {
   }
 }
 
+function validateTranslation(translated) {
+  const clean = String(translated || '').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&amp;/g, '&').trim();
+  if (!clean || /(QUERY\s+LENGTH|LIMIT\s+EXCEEDED|MAX(?:IMUM)?\s+ALLOWED|INVALID\s+QUERY|MYMEMORY\s+WARNING|PLEASE\s+REDUCE)/i.test(clean)) throw new Error('invalid translation response');
+  return clean;
+}
+
 async function translateLongText(text) {
-  const chunks = splitText(text, 900, 6);
+  const chunks = splitText(text, 420, 8);
   if (chunks.length <= 1) return remoteTranslate(text);
   const translated = [];
   for (const chunk of chunks) translated.push(await remoteTranslate(chunk));
   return translated.join('\n');
+}
+
+function productionText(text, maxLength = 1200) {
+  const clean = text.replace(/\r/g, '').trim();
+  if (clean.length <= maxLength) return { text: clean, shortened: false };
+  const slice = clean.slice(0, maxLength);
+  const boundary = Math.max(slice.lastIndexOf('\n'), slice.lastIndexOf('。'), slice.lastIndexOf('！'), slice.lastIndexOf('？'), slice.lastIndexOf('；'));
+  const safeEnd = boundary >= Math.floor(maxLength * .72) ? boundary + 1 : maxLength;
+  return { text: slice.slice(0, safeEnd).trim(), shortened: true };
 }
 
 function shortTitle(text) { const clean = text.replace(/\s+/g, ' ').trim(); return clean.length > 28 ? `${clean.slice(0, 28)}…` : clean; }
@@ -255,7 +271,15 @@ function renderArticleRows(english, chinese) {
     preview.articleColumns.appendChild(row);
   }
 }
-function bulletText(text, fallback, maxLength) { const clean = text.replace(/\s+/g, ' ').trim(); return `• ${clean.length > maxLength ? `${clean.slice(0, maxLength)}…` : clean || fallback}`; }
+function bulletText(text, fallback, maxLength) {
+  const clean = text.replace(/\s+/g, ' ').trim() || fallback;
+  if (clean.length <= maxLength) return `• ${clean}`;
+  const slice = clean.slice(0, maxLength);
+  const sentenceEnd = Math.max(slice.lastIndexOf('.'), slice.lastIndexOf('。'), slice.lastIndexOf('!'), slice.lastIndexOf('！'), slice.lastIndexOf('?'), slice.lastIndexOf('？'), slice.lastIndexOf(';'), slice.lastIndexOf('；'));
+  const wordEnd = slice.lastIndexOf(' ');
+  const safeEnd = sentenceEnd >= Math.floor(maxLength * .55) ? sentenceEnd + 1 : wordEnd >= Math.floor(maxLength * .7) ? wordEnd : maxLength;
+  return `• ${slice.slice(0, safeEnd).trim()}`;
+}
 function getTakeaway(english, tone) {
   if (tone === 'clear') return 'Clarity makes the next step easier.';
   if (tone === 'literary') return 'A quieter life can still hold a very bright light.';
@@ -305,6 +329,7 @@ function applyControlStyles() {
 function applyDesignSettings({ rerender = true, repaginate = false } = {}) {
   state.settings.coverHeight = Number(controls.coverHeight.value);
   state.settings.imageScale = Number(controls.imageScale.value);
+  state.settings.imageFit = controls.imageFit.value;
   state.settings.bodyFont = Number(controls.bodyFont.value);
   state.settings.lineHeight = Number(controls.lineHeight.value);
   state.settings.coverTitle = Number(controls.coverTitle.value);
@@ -522,15 +547,6 @@ function paginateBilingualByHeight(chinese, english) {
     }
   });
   if (current.length) pages.push(current);
-  if (pages.length > maxContentPages) {
-    const allUnits = pages.flat();
-    pages.length = 0;
-    for (let index = 0; index < maxContentPages; index += 1) {
-      const start = Math.floor((index * allUnits.length) / maxContentPages);
-      const end = Math.floor(((index + 1) * allUnits.length) / maxContentPages);
-      pages.push(allUnits.slice(start, end));
-    }
-  }
   return pages.slice(0, maxContentPages).map((pageUnits) => ({
     chinese: pageUnits.map((unit) => unit.chinese).filter(Boolean).join('\n'),
     english: pageUnits.map((unit) => unit.english).filter(Boolean).join('\n'),
@@ -622,7 +638,7 @@ function renderPreview(page, index = 0, isLive = false) {
       const image = document.createElement('img');
       image.src = page.image.url;
       image.alt = page.image.name || 'uploaded image';
-      image.classList.toggle('is-uploaded', Boolean(page.image.file));
+      image.classList.toggle('fit-contain', state.settings.imageFit === 'contain');
       preview.visual.appendChild(image);
       bindPreviewImagePosition(image, page.image);
     }
@@ -732,11 +748,22 @@ function renderPageStrip() {
     const button = document.createElement('button');
     const typeLabel = page.role === 'cover' ? '封面' : page.role === 'closing' ? '收束' : '正文';
     button.type = 'button'; button.className = index === state.currentPage ? 'active' : '';
+    button.setAttribute('aria-label', `第 ${index + 1} 页 · ${typeLabel}`);
     button.innerHTML = `<span class="story-number">${String(index + 1).padStart(2, '0')}</span><i class="story-mini ${page.role || 'article'}"><b></b><em></em></i><small>${typeLabel}</small>`;
     button.addEventListener('click', () => renderPreview(page, index)); pageStrip.appendChild(button);
+    const mini = button.querySelector('.story-mini');
+    canvasForPage(page).then((canvas) => {
+      if (!button.isConnected || state.pages[index] !== page) return;
+      const thumbnail = document.createElement('canvas');
+      thumbnail.width = 162;
+      thumbnail.height = 216;
+      thumbnail.getContext('2d').drawImage(canvas, 0, 0, thumbnail.width, thumbnail.height);
+      mini.appendChild(thumbnail);
+      mini.classList.add('has-preview');
+    });
   });
   updatePageNavigation();
-  exportHint.textContent = state.pages.length ? `1080×1440 · 已智能生成 ${state.pages.length} 页 · 图片和 Markdown 一起打包。` : '请先翻译并同步右侧，完成后才能下载。';
+  exportHint.textContent = state.pages.length ? `1080×1440 · 已生成 ${state.pages.length} 张 · 图片和 Markdown 一起打包。` : '请先翻译并同步右侧，完成后才能下载。';
 }
 
 function renderReviewEditor() {
@@ -760,18 +787,18 @@ async function generate() {
   liveRequestId += 1;
   if (liveAbortController) liveAbortController.abort();
   liveAbortController = null;
-  const manualText = source.value.trim(); const titleChinese = titleInput.value.trim(); if (!manualText && !titleChinese && !state.images.length) { source.focus(); showToast('先写下标题、中文正文，或上传一张图片'); return; }
+  const manualInput = source.value.trim(); const titleChinese = titleInput.value.trim(); if (!manualInput && !titleChinese && !state.images.length) { source.focus(); showToast('先写下标题、中文正文，或上传一张图片'); return; }
   const length = document.querySelector('#lengthSelect').value; generateBtn.disabled = true; setDownloadsEnabled(false); generateLabel.textContent = '正在翻译并同步右侧…'; setStatus('正在读取内容并翻译，完成后才能下载', true);
-  const imageTexts = await getImageText(); const combinedText = manualText || imageTexts.map((item) => item.ocrText).filter(Boolean).join('\n'); if (!combinedText && !titleChinese) { generateBtn.disabled = false; generateLabel.textContent = '一键翻译并生成笔记'; setStatus('没有读到中文内容，请补充文字或换一张图片', false); showToast('图片 OCR 没有识别出中文'); return; } let english = ''; let titleEnglish = ''; let usingLocal = false;
+  const imageTexts = await getImageText(); const rawText = manualInput || imageTexts.map((item) => item.ocrText).filter(Boolean).join('\n'); const prepared = productionText(rawText); const combinedText = prepared.text; if (!combinedText && !titleChinese) { generateBtn.disabled = false; generateLabel.textContent = '一键翻译并生成笔记'; setStatus('没有读到中文内容，请补充文字或换一张图片', false); showToast('图片 OCR 没有识别出中文'); return; } let english = ''; let titleEnglish = ''; let usingLocal = false;
   try { english = combinedText ? await translateLongText(combinedText) : ''; } catch { english = combinedText ? localTranslate(combinedText) : ''; usingLocal = true; }
   try { titleEnglish = titleChinese ? await remoteTranslate(titleChinese) : ''; } catch { titleEnglish = titleChinese ? localTranslate(titleChinese) : ''; usingLocal = true; }
   if (length === 'short') english = english.split(/(?<=[.!?])\s+/).slice(0, 2).join(' '); if (length === 'long' && !english.endsWith('.')) english += '.';
-  state.document = { manualText, titleChinese, titleEnglish, english, imageTexts, translationSource: usingLocal ? 'local' : 'online' };
-  state.pages = makePages(manualText, titleChinese, titleEnglish, english, imageTexts, state.document.translationSource); state.currentPage = 0; renderPageStrip(); renderReviewEditor(); const titleEn = renderPreview(state.pages[0], 0);
+  state.document = { manualText: combinedText, titleChinese, titleEnglish, english, imageTexts, translationSource: usingLocal ? 'local' : 'online' };
+  state.pages = makePages(combinedText, titleChinese, titleEnglish, english, imageTexts, state.document.translationSource); state.currentPage = 0; renderPageStrip(); renderReviewEditor(); const titleEn = renderPreview(state.pages[0], 0);
   const hasLocalPage = state.pages.some((page) => page.translationSource === 'local');
   setDownloadsEnabled(!hasLocalPage);
   setStatus(hasLocalPage ? `有页面尚未完成在线翻译 · 已同步预览但暂不能下载 · 点击重试` : `在线翻译已完成并同步右侧 · 共 ${state.pages.length} 页 · 可以下载`, false);
-  generateBtn.disabled = false; generateLabel.textContent = '重新翻译并同步右侧'; showToast(hasLocalPage ? '在线翻译暂未完成，请点击重试' : `翻译完成，右侧已同步 ${state.pages.length} 页 · ${titleEn}`);
+  generateBtn.disabled = false; generateLabel.textContent = '重新翻译并同步右侧'; showToast(hasLocalPage ? '在线翻译暂未完成，请点击重试' : prepared.shortened ? '内容已自动精简并完成排版' : `翻译完成，右侧已同步 ${state.pages.length} 页 · ${titleEn}`);
 }
 
 function downloadFile(filename, content, type) { downloadBlob(filename, new Blob([content], { type })); }
@@ -787,7 +814,7 @@ function fitCanvasFont(ctx, text, maxWidth, maxSize, minSize, family) { let size
 function drawImageCover(ctx, image, x, y, width, height, item) {
   const sourceWidth = image.naturalWidth || image.width;
   const sourceHeight = image.naturalHeight || image.height;
-  const fitScale = item?.file
+  const fitScale = state.settings.imageFit === 'contain'
     ? Math.min(width / sourceWidth, height / sourceHeight)
     : Math.max(width / sourceWidth, height / sourceHeight);
   const scale = fitScale * (state.settings.imageScale / 100);
@@ -866,7 +893,7 @@ function drawArticleCanvasRows(ctx, page, startY) {
   const englishBlocks = splitArticleBlocks(page.english);
   const chineseBlocks = splitArticleBlocks(page.chinese);
   const count = Math.max(englishBlocks.length, chineseBlocks.length, 1);
-  const available = Math.max(0, 1360 - startY);
+  const available = Math.max(0, 1340 - startY);
   const englishSize = state.settings.bodyFont * 1.9;
   const chineseSize = englishSize;
   const englishLine = Math.round(englishSize * state.settings.lineHeight);
@@ -877,7 +904,7 @@ function drawArticleCanvasRows(ctx, page, startY) {
   const chineseHeights = chineseBlocks.map((block) => wrapCanvasText2(ctx, block, 410, 'chars').length * chineseLine);
   const rowHeights = Array.from({ length: count }, (_, index) => Math.max(englishHeights[index] || 0, chineseHeights[index] || 0, chineseLine));
   const total = rowHeights.reduce((sum, height) => sum + height, 0);
-  const gap = count > 1 ? Math.max(18, Math.floor((available - total) / (count - 1))) : 0;
+  const gap = count > 1 ? Math.max(18, Math.min(38, Math.floor((available - total) / (count - 1)))) : 0;
   const fit = { englishSize, chineseSize, englishLine, chineseLine, gap };
   let y = startY;
   ctx.fillStyle = '#050505';
@@ -886,11 +913,15 @@ function drawArticleCanvasRows(ctx, page, startY) {
     const chinese = chineseBlocks[index] || '';
     ctx.font = `400 ${fit.englishSize}px Arial, "Helvetica Neue", sans-serif`;
     const englishLines = wrapCanvasText2(ctx, english, 420, 'words');
-    englishLines.forEach((line, lineIndex) => ctx.fillText(line, 37, y + lineIndex * fit.englishLine));
     ctx.font = `400 ${fit.chineseSize}px Arial, "PingFang SC", sans-serif`;
     const chineseLines = wrapCanvasText2(ctx, chinese, 410, 'chars');
+    const rowHeight = Math.max(englishLines.length * fit.englishLine, chineseLines.length * fit.chineseLine, fit.chineseLine);
+    if (y + rowHeight > 1340) break;
+    ctx.font = `400 ${fit.englishSize}px Arial, "Helvetica Neue", sans-serif`;
+    englishLines.forEach((line, lineIndex) => ctx.fillText(line, 37, y + lineIndex * fit.englishLine));
+    ctx.font = `400 ${fit.chineseSize}px Arial, "PingFang SC", sans-serif`;
     chineseLines.forEach((line, lineIndex) => ctx.fillText(line, 637, y + lineIndex * fit.chineseLine));
-    y += Math.max(englishLines.length * fit.englishLine, chineseLines.length * fit.chineseLine, fit.chineseLine) + fit.gap;
+    y += rowHeight + fit.gap;
   }
 }
 function drawArticleCanvasText(ctx, page) {
@@ -936,7 +967,7 @@ async function downloadZip() {
   if (!state.pages.length) { showToast('请先生成双语笔记'); return; }
   setStatus(`正在制作 ${state.pages.length} 页 ZIP`, true); const files = [];
   for (let index = 0; index < state.pages.length; index += 1) { const canvas = await canvasForPage(state.pages[index], index, state.pages.length); files.push({ name: `bilingual-note-${String(index + 1).padStart(2, '0')}.png`, data: await pageBlob(canvas) }); }
-  files.push({ name: 'bilingual-note.md', data: noteMarkdown() }); files.push({ name: 'README.txt', data: `${brandName()}双语笔记\n共 ${state.pages.length} 页 PNG + Markdown\n智能分页范围：3–6 页\n` }); downloadBlob('bilingual-note.zip', await buildZip(files)); setStatus(`ZIP 已准备完成 · ${state.pages.length} 页`, false); showToast('ZIP 笔记包已下载');
+  files.push({ name: 'bilingual-note.md', data: noteMarkdown() }); files.push({ name: 'README.txt', data: `${brandName()}双语笔记\n${state.pages.length} 张 PNG + Markdown\n` }); downloadBlob('bilingual-note.zip', await buildZip(files)); setStatus(`ZIP 已准备完成 · ${state.pages.length} 张`, false); showToast('ZIP 笔记包已下载');
 }
 
 source.addEventListener('input', scheduleLivePreview); titleInput.addEventListener('input', scheduleTitlePreview); generateBtn.addEventListener('click', generate); imageUpload.addEventListener('change', (event) => { addImages(event.target.files); event.target.value = ''; });
@@ -955,7 +986,8 @@ document.querySelectorAll('[data-art-filter]').forEach((button) => button.addEve
   document.querySelectorAll('[data-art-filter]').forEach((item) => item.classList.toggle('active', item === button));
   renderIllustrationLibrary();
 }));
-[controls.coverHeight, controls.imageScale, controls.coverTitle].forEach((input) => input.addEventListener('input', () => applyDesignSettings({ rerender: true, repaginate: false })));
+[controls.coverHeight, controls.imageScale, controls.coverTitle].forEach((input) => input.addEventListener('input', () => { applyDesignSettings({ rerender: true, repaginate: false }); if (state.pages.length) renderPageStrip(); }));
+controls.imageFit.addEventListener('change', () => { applyDesignSettings({ rerender: true, repaginate: false }); if (state.pages.length) renderPageStrip(); setStatus('图片显示方式已同步到预览与导出', false); });
 [controls.bodyFont, controls.lineHeight].forEach((input) => input.addEventListener('input', () => { applyDesignSettings({ rerender: true, repaginate: true }); setStatus(state.pages.length ? `排版参数已更新 · 当前 ${state.pages.length} 页` : '排版参数已同步到实时预览', false); }));
 state.libraryImage = null;
 updateCount(); renderUploadedImages(); renderIllustrationLibrary(); renderReviewEditor(); applyBrand(); applyDesignSettings({ rerender: false }); renderLivePreview(liveEnglish); setDownloadsEnabled(false); renderPageStrip();
