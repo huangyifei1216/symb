@@ -17,6 +17,8 @@ const files = [
   { path: '/', source: 'index.html', type: 'text/html; charset=utf-8' },
   { path: '/index.html', source: 'index.html', type: 'text/html; charset=utf-8' },
   { path: '/app.js', source: 'app.js', type: 'text/javascript; charset=utf-8' },
+  { path: '/robots.txt', source: 'robots.txt', type: 'text/plain; charset=utf-8' },
+  { path: '/sitemap.xml', source: 'sitemap.xml', type: 'application/xml; charset=utf-8' },
   ...cssFiles.map((file) => ({ path: `/assets/${file}`, source: `assets/${file}`, type: 'text/css; charset=utf-8' })),
 ];
 const entries = await Promise.all(files.map(async (file) => [file.path, { body: await readFile(resolve(dist, file.source), 'utf8'), type: file.type }]));

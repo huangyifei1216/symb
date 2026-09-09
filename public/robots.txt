@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://symb-3e9.pages.dev/sitemap.xml
